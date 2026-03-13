@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/pdf',
         'Content-Length': pdfBuffer.length.toString(),
         'X-File-Size-KB': sizeKB.toFixed(2),
-        'Content-Disposition': 'attachment; filename="nanopdf-200kb.pdf"',
+        'Content-Disposition': 'attachment; filename="nanopdf-compressed.pdf"',
       },
       status: 200,
     });

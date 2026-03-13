@@ -74,14 +74,21 @@ export default function Uploader() {
         throw new Error('Failed to generate PDF');
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+      const blob = await response.blob();
       const sizeKB = response.headers.get('X-File-Size-KB') || (blob.size / 1024).toFixed(2);
       
       const url = URL.createObjectURL(blob);
       setPdfUrl(url);
       setPdfSizeKB(parseFloat(sizeKB.toString()));
       setStatus('done');
+
+      // Programmatic download trigger
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "nanopdf-compressed.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch (err: any) {
       setError(err.message);
       setStatus('idle');
@@ -294,7 +301,7 @@ export default function Uploader() {
               <div className="flex flex-col sm:flex-row gap-6 justify-center">
                 <a 
                   href={pdfUrl!} 
-                  download="nanopdf-200kb.pdf"
+                  download="nanopdf-compressed.pdf"
                   className="bg-primary hover:bg-primary/90 text-white font-black py-6 px-16 rounded-[2rem] flex items-center justify-center gap-4 transition-all shadow-2xl hoverShadow hover:scale-105 active:scale-95 text-lg"
                 >
                   Download PDF

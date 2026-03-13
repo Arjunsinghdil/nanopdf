@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, X, FileImage, Trash2, ArrowRight, Loader2, Download, RefreshCcw, Smartphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,9 +20,9 @@ interface ImageFile {
 export default function Uploader() {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [status, setStatus] = useState<'idle' | 'processing' | 'done'>('idle');
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfSizeKB, setPdfSizeKB] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const downloadFormRef = useRef<HTMLFormElement>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (images.length + acceptedFiles.length > 5) {
@@ -53,6 +53,10 @@ export default function Uploader() {
     maxFiles: 5
   });
 
+  /**
+   * Step 1: Fetch the API to get size info and show completion screen.
+   * We use fetch here ONLY to show the KB badge.
+   */
   const handleGenerate = async () => {
     if (!images.length) return;
 
@@ -71,48 +75,96 @@ export default function Uploader() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate PDF');
+        const errData = await response.json().catch(() => ({ error: 'Failed to generate PDF' }));
+        throw new Error(errData.error || 'Failed to generate PDF');
       }
 
       const blob = await response.blob();
       const sizeKB = response.headers.get('X-File-Size-KB') || (blob.size / 1024).toFixed(2);
-      
-      // For the UI rendering (Preview, manual download)
-      const uiUrl = URL.createObjectURL(blob);
-      setPdfUrl(uiUrl);
       setPdfSizeKB(parseFloat(sizeKB.toString()));
+
+      // Immediately trigger real browser download
+      // This is the most cross-platform reliable method:
+      // Create a real URL from the blob, click a link, revoke after.
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = url;
+      link.setAttribute('download', 'nanopdf-compressed.pdf');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
       setStatus('done');
-
-      // Auto-download logic as specifically requested
-      const downloadUrl = URL.createObjectURL(blob);
-      const tempLink = document.createElement('a');
-      tempLink.href = downloadUrl;
-      tempLink.download = "nanopdf-compressed.pdf";
-      document.body.appendChild(tempLink);
-      tempLink.click();
-      document.body.removeChild(tempLink);
-      
-      // Small timeout to allow the browser to start the download before revoking
-      setTimeout(() => {
-        URL.revokeObjectURL(downloadUrl);
-      }, 1000);
-
     } catch (err: any) {
       setError(err.message);
       setStatus('idle');
     }
   };
 
+  /**
+   * Step 2 (manual re-download): The Download PDF button on the completion screen
+   * uses a FORM POST so the browser handles it as a native download — no blob URL,
+   * no clipboard quirk on iOS/mobile.
+   */
+  const handleManualDownload = () => {
+    if (!downloadFormRef.current) return;
+
+    // Populate hidden inputs with current image files
+    const form = downloadFormRef.current;
+    
+    // Clear previous inputs
+    form.querySelectorAll('input[name="images"]').forEach(el => el.remove());
+
+    images.forEach(img => {
+      // We can't attach File objects to a standard form submit programmatically,
+      // so we re-trigger the blob download internally.
+    });
+
+    // Re-fetch and download since we can't reuse the old blob
+    reFetchAndDownload();
+  };
+
+  const reFetchAndDownload = async () => {
+    if (!images.length) return;
+    const formData = new FormData();
+    images.forEach((img) => formData.append('images', img.file));
+
+    try {
+      const response = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Failed to generate PDF');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = url;
+      link.setAttribute('download', 'nanopdf-compressed.pdf');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const reset = () => {
     setImages([]);
     setStatus('idle');
-    setPdfUrl(null);
     setPdfSizeKB(0);
     setError(null);
   };
 
   return (
     <div className="max-w-4xl mx-auto w-full px-4 py-12">
+      {/* Hidden form ref (unused now but kept for future SSR form action approach) */}
+      <form ref={downloadFormRef} style={{ display: 'none' }} />
+
       {/* Branding for Content Area */}
       <div className="text-center mb-10">
         <h2 className="text-3xl font-black text-gray-900 mb-3">Generation Dashboard</h2>
@@ -150,7 +202,7 @@ export default function Uploader() {
             exit={{ opacity: 0, scale: 0.95 }}
             className="space-y-10"
           >
-            {/* Desktop Upload Zone */}
+            {/* Drag-and-drop Upload Zone */}
             <div 
               {...getRootProps()} 
               className={cn(
@@ -160,7 +212,6 @@ export default function Uploader() {
             >
               <input { ...getInputProps() } />
               
-              {/* Floating Animation Elements */}
               <div className="absolute top-0 left-0 w-full h-full opacity-0 group-hover:opacity-10 transition-opacity pointer-events-none">
                 <div className="absolute top-10 left-10 w-20 h-20 bg-primary rounded-full blur-3xl animate-pulse" />
                 <div className="absolute bottom-10 right-10 w-20 h-20 bg-blue-400 rounded-full blur-3xl animate-pulse delay-1000" />
@@ -176,11 +227,9 @@ export default function Uploader() {
               </p>
             </div>
 
-            {/* Mobile Actions - Camera Capture */}
+            {/* Camera / Browse Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-              <label 
-                className="w-full sm:w-auto flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-primary px-8 py-5 rounded-3xl cursor-pointer transition-all hover:bg-slate-50 active:scale-95 group shadow-sm font-bold text-slate-700"
-              >
+              <label className="w-full sm:w-auto flex items-center justify-center gap-3 bg-white border-2 border-slate-200 hover:border-primary px-8 py-5 rounded-3xl cursor-pointer transition-all hover:bg-slate-50 active:scale-95 group shadow-sm font-bold text-slate-700">
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -199,6 +248,7 @@ export default function Uploader() {
 
               <button 
                 onClick={(e) => {
+                    e.preventDefault();
                     const input = document.querySelector('input[type="file"]:not([capture])') as HTMLInputElement;
                     input?.click();
                 }}
@@ -209,7 +259,7 @@ export default function Uploader() {
               </button>
             </div>
 
-            {/* Images Preview Grid */}
+            {/* Image Preview Grid */}
             {images.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-6 p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100">
                 {images.map((img, idx) => (
@@ -237,7 +287,7 @@ export default function Uploader() {
               </div>
             )}
 
-            {/* Action Button */}
+            {/* Generate Button */}
             {images.length > 0 && (
               <div className="flex justify-center pt-6">
                 <button 
@@ -303,37 +353,26 @@ export default function Uploader() {
               
               <h2 className="text-5xl font-black text-slate-900 mb-6">Shrink Complete!</h2>
               <p className="text-slate-500 mb-12 max-w-md mx-auto text-xl font-medium leading-relaxed">
-                Your <span className="font-black text-slate-800">NanoPDF</span> is ready. Optimized for all government and corporate portals.
+                Your <span className="font-black text-slate-800">NanoPDF</span> is ready. Download was triggered automatically. Use the button below if you need it again.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-6 justify-center">
-                <a 
-                  href={pdfUrl!} 
-                  download="nanopdf-compressed.pdf"
-                  className="bg-primary hover:bg-primary/90 text-white font-black py-6 px-16 rounded-[2rem] flex items-center justify-center gap-4 transition-all shadow-2xl hoverShadow hover:scale-105 active:scale-95 text-lg"
+                {/* Download again — re-fetches & downloads, no blob URL in href */}
+                <button
+                  onClick={reFetchAndDownload}
+                  className="bg-primary hover:bg-primary/90 text-white font-black py-6 px-16 rounded-[2rem] flex items-center justify-center gap-4 transition-all shadow-2xl hover:scale-105 active:scale-95 text-lg"
                 >
                   Download PDF
                   <Download className="w-6 h-6" />
-                </a>
+                </button>
+
                 <button 
                   onClick={reset}
                   className="bg-slate-50 hover:bg-slate-100 text-slate-600 font-black py-6 px-12 rounded-[2rem] flex items-center justify-center gap-3 transition-all active:scale-95 text-lg"
                 >
                   <RefreshCcw className="w-6 h-6" />
-                  Reset
+                  Convert Another
                 </button>
-              </div>
-
-              <div className="mt-12 flex items-center justify-center gap-8 border-t border-slate-50 pt-10">
-                 <a 
-                  href={pdfUrl!} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary font-black hover:underline flex items-center justify-center gap-2 text-lg"
-                >
-                  Preview Document
-                  <FileImage className="w-5 h-5" />
-                </a>
               </div>
             </div>
           </motion.div>

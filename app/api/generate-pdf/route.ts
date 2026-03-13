@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     console.log(`Generated PDF size: ${sizeKB.toFixed(2)} KB, Buffer length: ${pdfBuffer.length}`);
 
     // Return the PDF buffer and the file size header
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as any, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Length': pdfBuffer.length.toString(),

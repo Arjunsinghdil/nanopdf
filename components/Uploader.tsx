@@ -77,18 +77,26 @@ export default function Uploader() {
       const blob = await response.blob();
       const sizeKB = response.headers.get('X-File-Size-KB') || (blob.size / 1024).toFixed(2);
       
-      const url = URL.createObjectURL(blob);
-      setPdfUrl(url);
+      // For the UI rendering (Preview, manual download)
+      const uiUrl = URL.createObjectURL(blob);
+      setPdfUrl(uiUrl);
       setPdfSizeKB(parseFloat(sizeKB.toString()));
       setStatus('done');
 
-      // Programmatic download trigger
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = "nanopdf-compressed.pdf";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      // Auto-download logic as specifically requested
+      const downloadUrl = URL.createObjectURL(blob);
+      const tempLink = document.createElement('a');
+      tempLink.href = downloadUrl;
+      tempLink.download = "nanopdf-compressed.pdf";
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      document.body.removeChild(tempLink);
+      
+      // Small timeout to allow the browser to start the download before revoking
+      setTimeout(() => {
+        URL.revokeObjectURL(downloadUrl);
+      }, 1000);
+
     } catch (err: any) {
       setError(err.message);
       setStatus('idle');

@@ -54,10 +54,10 @@ export async function processImage(
 export async function generateAdaptivePDF(
   imageBuffers: Buffer[],
   targetSizeKB: number = 200
-): Promise<{ pdfBuffer: Buffer; sizeKB: number }> {
+): Promise<{ pdfBuffer: Uint8Array; sizeKB: number }> {
   let currentQuality = 80;
   let currentHeight = 1200;
-  let finalPdfBuffer: Buffer | null = null;
+  let finalPdfBuffer: Uint8Array | null = null;
   let currentSizeKB = 0;
 
   // Max 6 iterations to avoid slow processing
@@ -89,7 +89,7 @@ export async function generateAdaptivePDF(
     }
 
     const pdfBytes = await pdfDoc.save();
-    finalPdfBuffer = Buffer.from(pdfBytes);
+    finalPdfBuffer = pdfBytes;
     currentSizeKB = finalPdfBuffer.length / 1024;
 
     if (currentSizeKB <= targetSizeKB) {

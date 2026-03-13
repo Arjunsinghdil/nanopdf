@@ -74,7 +74,8 @@ export default function Uploader() {
         throw new Error('Failed to generate PDF');
       }
 
-      const blob = await response.blob();
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
       const sizeKB = response.headers.get('X-File-Size-KB') || (blob.size / 1024).toFixed(2);
       
       const url = URL.createObjectURL(blob);
@@ -293,7 +294,7 @@ export default function Uploader() {
               <div className="flex flex-col sm:flex-row gap-6 justify-center">
                 <a 
                   href={pdfUrl!} 
-                  download="NanoPDF_Compressed.pdf"
+                  download="nanopdf-200kb.pdf"
                   className="bg-primary hover:bg-primary/90 text-white font-black py-6 px-16 rounded-[2rem] flex items-center justify-center gap-4 transition-all shadow-2xl hoverShadow hover:scale-105 active:scale-95 text-lg"
                 >
                   Download PDF

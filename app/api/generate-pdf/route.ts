@@ -30,13 +30,15 @@ export async function POST(req: NextRequest) {
     // Generate PDF with adaptive compression to hit target < 200 KB
     const { pdfBuffer, sizeKB } = await generateAdaptivePDF(processedImages, 200);
 
+    console.log(`Generated PDF size: ${sizeKB.toFixed(2)} KB, Buffer length: ${pdfBuffer.length}`);
+
     // Return the PDF buffer and the file size header
-    return new Response(new Uint8Array(pdfBuffer), {
+    return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Length': pdfBuffer.length.toString(),
         'X-File-Size-KB': sizeKB.toFixed(2),
-        'Content-Disposition': `attachment; filename="TR_Smart_Document.pdf"`,
+        'Content-Disposition': 'attachment; filename="nanopdf-200kb.pdf"',
       },
       status: 200,
     });
